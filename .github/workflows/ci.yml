@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke-test CLI on examples
+        run: |
+          node dist/cli.cjs build examples/oidc.ireko -o out/oidc
+          node dist/cli.cjs build examples/login-consolidation.ireko -o out/login
+          test -f out/oidc/index.html
+          test -f out/oidc/diagrams.json
+          test -f out/login/index.html
+          test -f out/login/diagrams.json
+          # Verify diagrams.json is inlined into index.html so file:// works.
+          grep -q 'id="ireko-data"' out/oidc/index.html
