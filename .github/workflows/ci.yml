@@ -34,11 +34,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
-
+      # Build before test because tests/cli.test.ts spawns dist/cli.cjs.
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
       - name: Smoke-test CLI on examples
         run: |

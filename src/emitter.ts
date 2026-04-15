@@ -92,12 +92,17 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
 
     switch (host.type) {
       case "sequence": {
-        const anchor = lastParticipant ?? participants[0] ?? "Actor";
-        // If no participant exists yet, synthesize one so Mermaid can render.
+        // Reserved name starting with `__` so it can't collide with a
+        // user-declared participant (ireko identifiers start with a letter
+        // or single underscore but not the double-underscore prefix
+        // convention used below — even if someone did pick it, Mermaid will
+        // merge duplicate participant declarations rather than render twice).
+        const SYNTHETIC_ACTOR = "__ireko_actor";
+        const anchor = lastParticipant ?? participants[0] ?? SYNTHETIC_ACTOR;
         if (lastParticipant === null && participants.length === 0) {
-          outLines.push(`${indent}participant Actor`);
-          lastParticipant = "Actor";
-          participants.push("Actor");
+          outLines.push(`${indent}participant ${SYNTHETIC_ACTOR}`);
+          lastParticipant = SYNTHETIC_ACTOR;
+          participants.push(SYNTHETIC_ACTOR);
         }
         outLines.push(`${indent}Note over ${anchor}: 🔍 ${label}${marker}`);
         break;

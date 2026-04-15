@@ -41,10 +41,15 @@ export function build(sourcePath: string, outDir: string): BuildResult {
   const templateHtml = readFileSync(join(assets, "index.html"), "utf8");
 
   // Inline diagrams.json into index.html so the viewer works from file://
-  // (where fetch() is typically blocked). JSON is embedded in a JSON-typed
-  // script tag and parsed by the viewer — this avoids any need to escape
-  // JS-specific sequences beyond `</`.
-  const safeJson = jsonText.replace(/<\/script/gi, "<\\/script");
+  // (where fetch() is typically blocked). The JSON lives in a JSON-typed
+  // script tag, parsed at boot by the viewer. We defang the three sequences
+  // that could break out of a raw-text element or re-enter HTML parsing:
+  // `</script` (closes the element), `<!--` and `-->` (legacy HTML comment
+  // transitions recognized inside <script>).
+  const safeJson = jsonText
+    .replace(/<\/script/gi, "<\\/script")
+    .replace(/<!--/g, "<\\!--")
+    .replace(/-->/g, "--\\>");
   const dataScript =
     `<script id="ireko-data" type="application/json">${safeJson}</script>`;
   const inlinedCss = `<style data-ireko-inline>${styleCss}</style>`;

@@ -138,7 +138,7 @@ diagram Sub "S" {
 }
 `);
     const m = out.diagrams[out.root].mermaid;
-    expect(m).toContain("participant Actor");
-    expect(m).toContain("Note over Actor:");
+    expect(m).toContain("participant __ireko_actor");
+    expect(m).toContain("Note over __ireko_actor:");
   });
 });

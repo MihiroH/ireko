@@ -152,9 +152,11 @@ out/
 ```
 
 The generated `index.html` can be opened directly via `file://` (the data is
-inlined, so no server is required). Mermaid is loaded from a CDN by default;
-for offline / air-gapped use, replace the CDN `<script>` tag with a local
-copy of `mermaid.esm.min.mjs`.
+inlined, so no server is required). Mermaid is loaded from a pinned CDN URL
+(`mermaid@11.14.0`). For a hardened deployment, add an SRI `integrity` hash
+(instructions are embedded as a comment in the generated HTML) or vendor
+`mermaid.esm.min.mjs` alongside `index.html` and change the URL to a
+relative path.
 
 ## Errors and warnings
 

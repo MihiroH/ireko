@@ -6,11 +6,23 @@
     <title>ireko</title>
     <link rel="stylesheet" href="style.css" />
     <!--
-      Mermaid is loaded from a CDN. For offline use, replace this with a
-      vendored copy; ireko passes the body opaquely so any Mermaid build works.
+      Mermaid is loaded from a CDN, pinned to a specific minor+patch so the
+      bundle can't change under your feet. For a hardened deployment, add
+      Subresource Integrity:
+
+        1. Compute the hash:
+             curl -sL https://cdn.jsdelivr.net/npm/mermaid@11.14.0/dist/mermaid.esm.min.mjs \
+               | openssl dgst -sha384 -binary | openssl base64 -A
+        2. Add `integrity="sha384-<hash>"` and `crossorigin="anonymous"`
+           attributes to the <script> tag below, and use a <link rel="modulepreload">
+           tag (<script type="module"> does not honor integrity attributes directly
+           in all browsers — preload gives SRI coverage).
+
+      For offline / air-gapped use, vendor mermaid.esm.min.mjs alongside
+      index.html and change the URL to a relative path.
     -->
     <script type="module">
-      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.14.0/dist/mermaid.esm.min.mjs";
       mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
       window.__ireko_mermaid = mermaid;
     </script>

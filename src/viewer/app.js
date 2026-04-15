@@ -15,6 +15,8 @@
   var MARKER_RE = /\u200B?\u27E6ireko:([A-Za-z_][A-Za-z0-9_]*)\u27E7\u200B?/g;
 
   var BREADCRUMB_KEY = "ireko.breadcrumbs";
+  var MAX_RENDER_ATTEMPTS = 60; // ~3s at 50ms interval
+  var renderAttempts = 0;
 
   var state = {
     data: null,
@@ -105,10 +107,19 @@
 
     var mermaid = window.__ireko_mermaid;
     if (!mermaid) {
-      // Mermaid ESM import is async; retry shortly.
+      // Mermaid ESM import is async; poll briefly. Cap so a broken CDN
+      // doesn't loop forever.
+      renderAttempts += 1;
+      if (renderAttempts > MAX_RENDER_ATTEMPTS) {
+        main.innerHTML =
+          '<pre class="ireko-error">Mermaid failed to load. ' +
+          'Check your network connection or the CDN referenced in index.html.</pre>';
+        return;
+      }
       setTimeout(function () { render(id); }, 50);
       return;
     }
+    renderAttempts = 0;
 
     var renderId = "ireko-" + id + "-" + Date.now();
     mermaid
@@ -192,7 +203,8 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function onHashChange() {

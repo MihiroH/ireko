@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { build } from "./build.js";
 import { IrekoError, formatError } from "./errors.js";
+import pkg from "../package.json" with { type: "json" };
 
 const USAGE = `ireko — nested diagrams
 
@@ -59,7 +60,7 @@ function main(): number {
     return 0;
   }
   if (args.version) {
-    process.stdout.write(`ireko 0.1.0\n`);
+    process.stdout.write(`ireko ${pkg.version}\n`);
     return 0;
   }
 
@@ -103,4 +104,6 @@ function main(): number {
   }
 }
 
-process.exit(main());
+// Set exitCode rather than calling process.exit so buffered stdout (piped
+// stdio is async) has a chance to flush before Node shuts down.
+process.exitCode = main();
