@@ -41,13 +41,16 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Build every example with the installed-style CLI binary and verify
+      # each site is complete. Semantic validity of the emitted Mermaid is
+      # checked by tests/examples.test.ts (which uses the real mermaid parser).
       - name: Smoke-test CLI on examples
         run: |
-          node dist/cli.cjs build examples/oidc.ireko -o out/oidc
-          node dist/cli.cjs build examples/login-consolidation.ireko -o out/login
-          test -f out/oidc/index.html
-          test -f out/oidc/diagrams.json
-          test -f out/login/index.html
-          test -f out/login/diagrams.json
-          # Verify diagrams.json is inlined into index.html so file:// works.
-          grep -q 'id="ireko-data"' out/oidc/index.html
+          set -e
+          for src in examples/*.ireko; do
+            name=$(basename "$src" .ireko)
+            node dist/cli.cjs build "$src" -o "out/$name"
+            test -f "out/$name/index.html"
+            test -f "out/$name/diagrams.json"
+            grep -q 'id="ireko-data"' "out/$name/index.html"
+          done

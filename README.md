@@ -209,6 +209,9 @@ src/
 └── viewer/      # index.html + app.js + style.css
 tests/           # vitest suites
 examples/        # .ireko sample sources
+                 #   oidc.ireko                   — OIDC login flow (the quick-start)
+                 #   login-consolidation.ireko    — longer case study
+                 #   architecture.ireko           — ireko's own pipeline, written in ireko
 ```
 
 ## Limitations (v0)

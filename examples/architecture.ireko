@@ -1,0 +1,98 @@
+// Architecture of ireko itself, written in ireko.
+// Build with:  node dist/cli.cjs build examples/architecture.ireko -o out/architecture
+// Then open:   out/architecture/index.html
+
+@root
+diagram "ireko Architecture" {
+  sequenceDiagram
+    actor User
+    participant CLI as cli_ts
+    participant Build as build_ts
+    participant FS as Filesystem
+    participant Viewer as viewer_app_js
+
+    User->>CLI: ireko build flow.ireko -o out/
+    CLI->>Build: build(inputPath, outDir)
+    Build->>FS: readFileSync(input)
+    FS-->>Build: source text
+    ref ParsePipeline
+    Build->>FS: write diagrams.json + inlined index.html + assets
+    CLI-->>User: "wrote N file(s) to out/"
+
+    User->>Viewer: open out/index.html in browser
+    ref ViewerRuntime
+    Viewer-->>User: rendered diagram with clickable refs
+}
+
+diagram ParsePipeline "Pipeline: lex → parse → link → emit" {
+  sequenceDiagram
+    participant Src as source_text
+    participant Lexer as lexer_ts
+    participant Parser as parser_ts
+    participant Linker as linker_ts
+    participant Emitter as emitter_ts
+
+    Src->>Lexer: lex source
+    Note over Lexer: two modes (header / body), brace-depth tracking, ER cardinality stripping
+    Lexer-->>Parser: Token list
+    Parser->>Parser: recursive descent
+    Parser-->>Linker: File AST
+    ref LinkValidate
+    Linker-->>Emitter: LinkedProgram
+    ref EmitSubstitute
+    Emitter-->>Src: DiagramsOutput root + diagrams map
+}
+
+diagram LinkValidate "Link & validate" {
+  flowchart TB
+    Start([File AST]) --> Assign[Assign ids, synth __root__ for anonymous root]
+    Assign --> DupCheck{Duplicate id?}
+    DupCheck -- yes --> Err1[error: duplicate diagram identifier]
+    DupCheck -- no --> RefResolve[Resolve refs and build children map]
+    RefResolve --> UndefCheck{Undefined ref?}
+    UndefCheck -- yes --> Err2[error: undefined ref]
+    UndefCheck -- no --> SelfCheck{Self-reference?}
+    SelfCheck -- yes --> Err3[error: references itself]
+    SelfCheck -- no --> CycleDFS[Single DFS over all diagram ids]
+    CycleDFS --> CycleCheck{Back-edge?}
+    CycleCheck -- yes --> Err4[error: cycle detected A to B to A]
+    CycleCheck -- no --> Reach[Mark reachable from root]
+    Reach --> Done([LinkedProgram])
+    Reach --> Warn[warn: diagram never referenced from root]
+}
+
+diagram EmitSubstitute "Emit: per-host ref substitution" {
+  flowchart TB
+    Ref([ref Sub line]) --> Detect{host type}
+    Detect -- sequenceDiagram --> Seq[Note over last-participant: label + marker]
+    Detect -- flowchart/graph --> Flow["__ref_Sub__[ label + marker ]"]
+    Detect -- stateDiagram-v2 --> State[state label + marker as Sub_ref]
+    Detect -- other --> Comment[%% ref: Sub]
+    Seq --> Out([Mermaid source + refs entry])
+    Flow --> Out
+    State --> Out
+    Comment --> Out
+}
+
+diagram ViewerRuntime "Viewer runtime" {
+  sequenceDiagram
+    participant Browser
+    participant App as app_js
+    participant Storage as sessionStorage
+    participant Mermaid
+
+    Browser->>App: DOMContentLoaded
+    App->>App: boot() — read inlined #ireko-data
+    App->>Storage: load breadcrumbs
+    Storage-->>App: trail (or null)
+    App->>App: navigate(hash or root)
+    App->>Mermaid: render(diagram.mermaid)
+    Mermaid-->>App: SVG
+    App->>App: postProcessMarkers(svg)
+    Note over App: find ireko markers in text nodes, strip them, attach click handlers
+
+    Browser->>App: click on ref marker
+    App->>Browser: window.location.hash = targetId
+    Browser->>App: hashchange event
+    App->>Mermaid: render(new diagram)
+}
