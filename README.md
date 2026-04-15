@@ -32,7 +32,7 @@ pnpm add -D ireko
 npm i -D ireko
 ```
 
-Requires Node.js ≥ 20.
+Requires Node.js ≥ 22. (Node 20 reached end-of-life on 2026-04-30.)
 
 ## Quick start
 

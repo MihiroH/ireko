@@ -16,6 +16,9 @@
     "LICENSE",
     "THIRD_PARTY_LICENSES.md"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsup",
     "build:viewer": "node scripts/build-viewer.mjs",

@@ -9,7 +9,7 @@ export default defineConfig([
     format: ["cjs", "esm"],
     dts: true,
     clean: true,
-    target: "node20",
+    target: "node22",
     platform: "node",
     sourcemap: true,
     shims: true,

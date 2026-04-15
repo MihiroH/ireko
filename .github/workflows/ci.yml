@@ -12,7 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ["20", "22"]
+        # Node 20 EOLs 2026-04-30; Node 22 is Maintenance LTS (EOL 2027-04-30);
+        # Node 24 is Active LTS. Test against both supported LTS lines.
+        node: ["22", "24"]
 
     steps:
       - uses: actions/checkout@v4
