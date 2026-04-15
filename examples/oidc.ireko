@@ -1,0 +1,25 @@
+@root
+diagram "OIDC Login Flow" {
+  sequenceDiagram
+    participant User
+    participant Browser
+    participant AuthServer
+
+    User->>Browser: Click login
+    Browser->>AuthServer: GET /authorize
+    AuthServer->>Browser: Redirect with code
+    ref TokenExchange
+    Browser->>User: Logged in
+}
+
+diagram TokenExchange "Token Exchange" {
+  sequenceDiagram
+    participant Browser
+    participant AuthServer
+    participant TokenEndpoint
+
+    Browser->>AuthServer: POST /token (code)
+    AuthServer->>TokenEndpoint: Validate code
+    TokenEndpoint->>AuthServer: Issue JWT
+    AuthServer->>Browser: Set session cookie
+}

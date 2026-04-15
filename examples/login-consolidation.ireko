@@ -1,0 +1,39 @@
+@root
+diagram "Login URL Consolidation" {
+  sequenceDiagram
+    participant User
+    participant LB as GCP_Load_Balancer
+    participant Auth as wklr_auth2
+    participant App as Target_Service
+
+    User->>LB: GET account.legalscape.jp
+    ref RouteDecision
+    LB->>Auth: Forward to auth
+    ref FirebaseSignIn
+    Auth->>App: Redirect with session
+    App->>User: Authenticated
+}
+
+diagram RouteDecision "URL Map Routing" {
+  sequenceDiagram
+    participant LB as Load_Balancer
+    participant URLMap
+    participant CloudArmor
+
+    LB->>CloudArmor: Check headers
+    CloudArmor->>LB: X-Release-Candidate?
+    LB->>URLMap: Match route_rules
+    URLMap->>LB: Backend service
+}
+
+diagram FirebaseSignIn "Firebase Auth Flow" {
+  sequenceDiagram
+    participant Browser
+    participant Auth as wklr_auth2
+    participant Firebase
+
+    Browser->>Auth: POST /signin
+    Auth->>Firebase: signInWithPopup
+    Firebase->>Auth: ID token
+    Auth->>Browser: Set session cookie (.legalscape.jp)
+}

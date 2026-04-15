@@ -1,0 +1,119 @@
+:root {
+  --ireko-bg: #fafafa;
+  --ireko-fg: #222;
+  --ireko-muted: #666;
+  --ireko-accent: #2563eb;
+  --ireko-accent-bg: #eff6ff;
+  --ireko-border: #e5e5e5;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ireko-bg: #111;
+    --ireko-fg: #eee;
+    --ireko-muted: #aaa;
+    --ireko-accent: #60a5fa;
+    --ireko-accent-bg: #1e293b;
+    --ireko-border: #333;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background: var(--ireko-bg);
+  color: var(--ireko-fg);
+  min-height: 100vh;
+}
+
+.ireko-header {
+  padding: 1rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--ireko-border);
+}
+
+.ireko-header h1 {
+  font-size: 1.4rem;
+  margin: 0.3rem 0 0;
+}
+
+#breadcrumbs {
+  font-size: 0.85rem;
+  color: var(--ireko-muted);
+}
+
+#breadcrumbs a {
+  color: var(--ireko-accent);
+  text-decoration: none;
+}
+
+#breadcrumbs a:hover {
+  text-decoration: underline;
+}
+
+#breadcrumbs .sep {
+  margin: 0 0.35rem;
+  color: var(--ireko-muted);
+}
+
+main#diagram-root {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+main#diagram-root svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.ireko-loading,
+.ireko-error {
+  color: var(--ireko-muted);
+}
+
+.ireko-error {
+  color: #dc2626;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.ireko-footer {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--ireko-border);
+  font-size: 0.75rem;
+  color: var(--ireko-muted);
+}
+
+.ireko-footer a {
+  color: var(--ireko-muted);
+}
+
+/* Clickable ref markers inside the rendered SVG. */
+.ireko-ref {
+  cursor: pointer;
+}
+
+.ireko-ref text {
+  fill: var(--ireko-accent);
+  font-weight: 600;
+}
+
+.ireko-ref:hover text {
+  text-decoration: underline;
+}

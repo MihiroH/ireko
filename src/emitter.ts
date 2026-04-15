@@ -1,0 +1,139 @@
+import type { BodyLine, Diagram } from "./ast.js";
+import type { LinkedProgram } from "./linker.js";
+
+/**
+ * The data shape the emitter writes to `diagrams.json`. Matches the schema
+ * the viewer consumes from the static shell.
+ */
+export interface DiagramsOutput {
+  /** Root diagram id. */
+  root: string;
+  /** All diagrams keyed by id. */
+  diagrams: Record<string, EmittedDiagram>;
+}
+
+export interface EmittedDiagram {
+  id: string;
+  title: string;
+  /** Raw Mermaid source ready to be passed to `mermaid.render`. */
+  mermaid: string;
+  /** Refs in source order, used by the viewer to rebuild click targets. */
+  refs: { ref: string; label: string }[];
+}
+
+/**
+ * Marker format injected into Mermaid source at each `ref` site. The viewer
+ * regex-matches this in rendered SVG text and replaces it with a clickable
+ * handle. Zero-width spaces make the marker invisible if stripping fails.
+ *
+ * Format: `\u200B⟦ireko:ID⟧\u200B` — the bracket pair is the
+ * MATHEMATICAL WHITE SQUARE BRACKET (U+27E6 / U+27E7), rare in user text.
+ */
+export const IREKO_MARKER_OPEN = "\u200B\u27E6ireko:";
+export const IREKO_MARKER_CLOSE = "\u27E7\u200B";
+/** Regex the viewer uses to locate markers in rendered SVG text. */
+export const IREKO_MARKER_REGEX = /\u200B?\u27E6ireko:([A-Za-z_][A-Za-z0-9_]*)\u27E7\u200B?/g;
+
+/** Produce the emitter output for a linked program. */
+export function emit(program: LinkedProgram): DiagramsOutput {
+  const out: DiagramsOutput = { root: program.rootId, diagrams: {} };
+  for (const [id, diagram] of program.diagrams) {
+    out.diagrams[id] = emitDiagram(diagram, program);
+  }
+  return out;
+}
+
+type HostType = "sequence" | "flowchart" | "state" | "other";
+
+function detectHost(body: BodyLine[]): { type: HostType; header: string } {
+  for (const line of body) {
+    if (line.kind !== "raw") continue;
+    const t = line.text.trim();
+    if (t === "") continue;
+    if (/^sequenceDiagram\b/.test(t)) return { type: "sequence", header: t };
+    if (/^(flowchart|graph)\b/.test(t)) return { type: "flowchart", header: t };
+    if (/^stateDiagram(-v2)?\b/.test(t)) return { type: "state", header: t };
+    return { type: "other", header: t };
+  }
+  return { type: "other", header: "" };
+}
+
+function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
+  const host = detectHost(diagram.body);
+  const refs: { ref: string; label: string }[] = [];
+  const outLines: string[] = [];
+
+  // Track the most recently declared participant/actor for sequence notes.
+  let lastParticipant: string | null = null;
+  const participants: string[] = [];
+
+  for (const line of diagram.body) {
+    if (line.kind === "raw") {
+      outLines.push(line.text);
+      const p = extractParticipant(line.text);
+      if (p !== null) {
+        lastParticipant = p;
+        if (!participants.includes(p)) participants.push(p);
+      }
+      continue;
+    }
+
+    // Ref line — substitute based on host type.
+    const target = line.target;
+    const targetDiagram = program.diagrams.get(target)!;
+    const label = targetDiagram.title;
+    refs.push({ ref: target, label });
+    const marker = `${IREKO_MARKER_OPEN}${target}${IREKO_MARKER_CLOSE}`;
+    const indent = extractIndent(line);
+
+    switch (host.type) {
+      case "sequence": {
+        const anchor = lastParticipant ?? participants[0] ?? "Actor";
+        // If no participant exists yet, synthesize one so Mermaid can render.
+        if (lastParticipant === null && participants.length === 0) {
+          outLines.push(`${indent}participant Actor`);
+          lastParticipant = "Actor";
+          participants.push("Actor");
+        }
+        outLines.push(`${indent}Note over ${anchor}: 🔍 ${label}${marker}`);
+        break;
+      }
+      case "flowchart": {
+        outLines.push(`${indent}__ref_${target}__["🔍 ${label}${marker}"]`);
+        break;
+      }
+      case "state": {
+        outLines.push(`${indent}state "🔍 ${label}${marker}" as ${target}_ref`);
+        break;
+      }
+      case "other": {
+        outLines.push(`${indent}%% ref: ${target}`);
+        break;
+      }
+    }
+  }
+
+  return {
+    id: diagram.id!,
+    title: diagram.title,
+    mermaid: outLines.join("\n"),
+    refs,
+  };
+}
+
+/**
+ * Match `participant Foo` or `participant Foo as "Display Name"`
+ * or `actor Bob` lines. Returns the actor id (not display name), or null.
+ */
+function extractParticipant(text: string): string | null {
+  const trimmed = text.trim();
+  const m = /^(?:participant|actor)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/.exec(trimmed);
+  if (!m) return null;
+  return m[1];
+}
+
+function extractIndent(line: { pos: { col: number } }): string {
+  // Use the column the ref started at (1-based) minus 1 to reproduce indent.
+  const n = Math.max(0, line.pos.col - 1);
+  return " ".repeat(n);
+}
