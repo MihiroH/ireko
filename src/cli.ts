@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { parseArgs } from "node:util";
 import { build } from "./build.js";
 import { IrekoError, formatError } from "./errors.js";
 
@@ -16,51 +17,38 @@ Options:
   -v, --version      Show version
 `;
 
-function parseArgs(argv: string[]): {
+interface Parsed {
   command: string | null;
   input: string | null;
   out: string;
   help: boolean;
   version: boolean;
-} {
-  const result = {
-    command: null as string | null,
-    input: null as string | null,
-    out: "out",
-    help: false,
-    version: false,
+}
+
+function parseCliArgs(argv: string[]): Parsed {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      out: { type: "string", short: "o", default: "out" },
+      help: { type: "boolean", short: "h", default: false },
+      version: { type: "boolean", short: "v", default: false },
+    },
+    strict: true,
+    allowPositionals: true,
+  });
+  return {
+    command: positionals[0] ?? null,
+    input: positionals[1] ?? null,
+    out: values.out as string,
+    help: values.help as boolean,
+    version: values.version as boolean,
   };
-  const positional: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "-h" || a === "--help") {
-      result.help = true;
-    } else if (a === "-v" || a === "--version") {
-      result.version = true;
-    } else if (a === "-o" || a === "--out") {
-      const next = argv[i + 1];
-      if (!next) {
-        throw new Error(`${a} requires a value`);
-      }
-      result.out = next;
-      i++;
-    } else if (a.startsWith("--out=")) {
-      result.out = a.slice("--out=".length);
-    } else if (a.startsWith("-")) {
-      throw new Error(`unknown flag: ${a}`);
-    } else {
-      positional.push(a);
-    }
-  }
-  if (positional.length > 0) result.command = positional[0];
-  if (positional.length > 1) result.input = positional[1];
-  return result;
 }
 
 function main(): number {
-  let args: ReturnType<typeof parseArgs>;
+  let args: Parsed;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseCliArgs(process.argv.slice(2));
   } catch (err) {
     process.stderr.write(`ireko: ${(err as Error).message}\n\n${USAGE}`);
     return 2;

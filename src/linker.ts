@@ -7,54 +7,42 @@ import { IrekoError } from "./errors.js";
  * no cycles, all non-root diagrams are reachable — reachability is a warning).
  */
 export interface LinkedProgram {
-  /** Id of the root diagram. The root diagram is guaranteed to have an id (synthesized if needed). */
+  /** Guaranteed to exist in `diagrams` (synthesized if the author omitted it). */
   rootId: string;
-  /** Map from diagram id → diagram node. */
   diagrams: Map<string, Diagram>;
-  /** Adjacency: diagramId → list of child diagram ids in source order. */
-  children: Map<string, string[]>;
-  /** Warnings that don't fail the build (e.g., unused diagrams). */
+  /** Non-fatal compiler warnings (e.g., unreachable diagrams). */
   warnings: string[];
 }
 
 /**
  * Synthetic id assigned to the root diagram when the author omitted it.
- * Chosen so it cannot collide with a user identifier (starts with non-ident char).
+ * Starts with non-ident chars so it cannot collide with a user identifier.
  */
 export const SYNTHETIC_ROOT_ID = "__root__";
 
 /**
  * Links a parsed ireko file: resolves refs, detects duplicate ids, undefined
- * refs, and cycles. Returns a {@link LinkedProgram} suitable for emission.
- *
- * Duplicate ids, undefined refs, and cycles are all compile errors.
- * Unused (unreachable) non-root diagrams emit a warning.
+ * refs, self-references, and cycles. Unreachable non-root diagrams become
+ * warnings rather than errors.
  */
 export function link(file: File): LinkedProgram {
   const diagrams = new Map<string, Diagram>();
 
-  // 1. Assign an id to every diagram (synthesize one for an anonymous root).
   for (const d of file.diagrams) {
     const id = d.id ?? (d.isRoot ? SYNTHETIC_ROOT_ID : null);
     if (id === null) {
-      // Parser already enforces this, but guard anyway.
+      // Parser enforces this; belt-and-braces.
       throw new IrekoError(
         `non-root diagram "${d.title}" is missing an identifier`,
         d.pos,
       );
     }
     if (diagrams.has(id)) {
-      throw new IrekoError(
-        `duplicate diagram identifier '${id}'`,
-        d.pos,
-      );
+      throw new IrekoError(`duplicate diagram identifier '${id}'`, d.pos);
     }
-    // We need to remember that the root might have been anonymous — stash the
-    // resolved id back on the diagram so emitter can use it uniformly.
     diagrams.set(id, { ...d, id });
   }
 
-  // 2. Identify the root.
   const roots = [...diagrams.values()].filter((d) => d.isRoot);
   if (roots.length !== 1) {
     throw new IrekoError(
@@ -63,12 +51,10 @@ export function link(file: File): LinkedProgram {
   }
   const rootId = roots[0].id!;
 
-  // 3. Validate every ref target exists and build adjacency.
   const children = new Map<string, string[]>();
   for (const [id, d] of diagrams) {
-    const refs = d.body.filter((b): b is RefLine => b.kind === "ref");
     const childIds: string[] = [];
-    for (const ref of refs) {
+    for (const ref of d.body.filter((b): b is RefLine => b.kind === "ref")) {
       if (!diagrams.has(ref.target)) {
         throw new IrekoError(
           `undefined ref: no diagram named '${ref.target}'`,
@@ -76,27 +62,15 @@ export function link(file: File): LinkedProgram {
         );
       }
       if (ref.target === id) {
-        throw new IrekoError(
-          `diagram '${id}' references itself`,
-          ref.pos,
-        );
+        throw new IrekoError(`diagram '${id}' references itself`, ref.pos);
       }
       childIds.push(ref.target);
     }
     children.set(id, childIds);
   }
 
-  // 4. Detect cycles via DFS.
-  detectCycles(rootId, children, diagrams);
-  // Also check cycles reachable through non-root nodes (disconnected components).
-  const visited = new Set<string>();
-  for (const id of diagrams.keys()) {
-    if (!visited.has(id)) {
-      detectCyclesFrom(id, children, diagrams, visited, new Set());
-    }
-  }
+  detectCycles(diagrams, children);
 
-  // 5. Reachability warnings.
   const reachable = new Set<string>();
   const stack = [rootId];
   while (stack.length) {
@@ -106,47 +80,45 @@ export function link(file: File): LinkedProgram {
     for (const c of children.get(n) ?? []) stack.push(c);
   }
   const warnings: string[] = [];
-  for (const id of diagrams.keys()) {
+  for (const [id, d] of diagrams) {
     if (!reachable.has(id)) {
-      const d = diagrams.get(id)!;
       warnings.push(
         `diagram '${id}' ("${d.title}") is defined but never referenced from the root`,
       );
     }
   }
 
-  return { rootId, diagrams, children, warnings };
+  return { rootId, diagrams, warnings };
 }
 
+/**
+ * One DFS pass that visits every node (handles disconnected components too).
+ * Throws on the first back-edge with the full cycle path in the message.
+ */
 function detectCycles(
-  start: string,
-  children: Map<string, string[]>,
   diagrams: Map<string, Diagram>,
+  children: Map<string, string[]>,
 ): void {
-  detectCyclesFrom(start, children, diagrams, new Set(), new Set());
-}
+  const visited = new Set<string>();
+  const path: string[] = [];
+  const onPath = new Set<string>();
 
-function detectCyclesFrom(
-  node: string,
-  children: Map<string, string[]>,
-  diagrams: Map<string, Diagram>,
-  globalVisited: Set<string>,
-  pathStack: Set<string>,
-  path: string[] = [],
-): void {
-  if (pathStack.has(node)) {
-    const cycleStart = path.indexOf(node);
-    const cycle = path.slice(cycleStart).concat(node).join(" -> ");
-    const d = diagrams.get(node);
-    throw new IrekoError(`cycle detected: ${cycle}`, d?.pos ?? null);
-  }
-  if (globalVisited.has(node)) return;
-  globalVisited.add(node);
-  pathStack.add(node);
-  path.push(node);
-  for (const child of children.get(node) ?? []) {
-    detectCyclesFrom(child, children, diagrams, globalVisited, pathStack, path);
-  }
-  path.pop();
-  pathStack.delete(node);
+  const visit = (node: string): void => {
+    if (onPath.has(node)) {
+      const cycle = path.slice(path.indexOf(node)).concat(node).join(" -> ");
+      throw new IrekoError(
+        `cycle detected: ${cycle}`,
+        diagrams.get(node)?.pos ?? null,
+      );
+    }
+    if (visited.has(node)) return;
+    visited.add(node);
+    onPath.add(node);
+    path.push(node);
+    for (const child of children.get(node) ?? []) visit(child);
+    path.pop();
+    onPath.delete(node);
+  };
+
+  for (const id of diagrams.keys()) visit(id);
 }

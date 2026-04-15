@@ -1,5 +1,6 @@
 import type { Position } from "./ast.js";
 import { IrekoError } from "./errors.js";
+import { IDENT_PATTERN } from "./patterns.js";
 
 /**
  * Token types produced by the ireko lexer.
@@ -32,8 +33,11 @@ enum Mode {
   Body = "body",
 }
 
-/** Matches identifiers: start with letter or underscore, then letters/digits/underscore. */
-const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
+/** Sticky so we can match at `source[i]` without slicing — big win for long files. */
+const IDENT_RE = new RegExp(IDENT_PATTERN, "y");
+const REF_LINE_RE = new RegExp(`^\\s*ref\\s+(${IDENT_PATTERN})\\s*$`);
+const LEADING_WS_RE = /^\s*/;
+const ER_CARDINALITY_RE = /[|o{}]{1,2}--[|o{}]{1,2}/g;
 
 /** Lex an ireko source string into a token stream. */
 export function lex(source: string): Token[] {
@@ -73,15 +77,20 @@ export function lex(source: string): Token[] {
     }
   };
 
+  const matchIdentAt = (idx: number): string | null => {
+    IDENT_RE.lastIndex = idx;
+    const m = IDENT_RE.exec(source);
+    return m ? m[0] : null;
+  };
+
   const readIdent = (): Token => {
     const pos = here();
-    const rest = source.slice(i);
-    const m = IDENT_RE.exec(rest);
-    if (!m) {
+    const value = matchIdentAt(i);
+    if (!value) {
       throw new IrekoError(`expected identifier, got '${source[i] ?? "<EOF>"}'`, pos);
     }
-    advance(m[0].length);
-    return { kind: "IDENT", value: m[0], pos };
+    advance(value.length);
+    return { kind: "IDENT", value, pos };
   };
 
   const readString = (): Token => {
@@ -122,17 +131,11 @@ export function lex(source: string): Token[] {
     while (end < source.length && source[end] !== "\n") end++;
     const rawLine = source.slice(lineStart, end);
 
-    // Check if this line is only the closing brace (possibly with trailing
-    // whitespace) AND bodyDepth would fall to 0 after it. That case is
-    // detected by the caller; here we just classify.
-    //
-    // Check for `ref IDENT` (leading whitespace allowed, nothing else allowed).
-    const refMatch = /^\s*ref\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(rawLine);
+    const refMatch = REF_LINE_RE.exec(rawLine);
     if (refMatch) {
-      advance(end - i); // consume the line content
+      advance(end - i);
       if (source[i] === "\n") advance();
-      // Column where `ref` starts — useful for error messages
-      const indent = /^\s*/.exec(rawLine)![0].length;
+      const indent = LEADING_WS_RE.exec(rawLine)![0].length;
       return {
         kind: "REF_LINE",
         value: refMatch[1],
@@ -157,9 +160,8 @@ export function lex(source: string): Token[] {
     let open = 0;
     let close = 0;
     let inStr = false;
-    // Strip ER-style cardinality symbols: one or two chars from the set
-    // `|o{}`, followed by `--`, followed by another one or two such chars.
-    const stripped = text.replace(/[|o{}]{1,2}--[|o{}]{1,2}/g, "");
+    // Strip ER cardinality markers (`||--o{` etc.) — those braces aren't blocks.
+    const stripped = text.replace(ER_CARDINALITY_RE, "");
     for (let k = 0; k < stripped.length; k++) {
       const c = stripped[k];
       if (inStr) {
@@ -192,14 +194,18 @@ export function lex(source: string): Token[] {
       const c = source[i];
 
       if (c === "@") {
-        // @root annotation
-        const rest = source.slice(i);
-        if (rest.startsWith("@root") && !/[A-Za-z0-9_]/.test(rest[5] ?? "")) {
+        if (
+          source.startsWith("@root", i) &&
+          !/[A-Za-z0-9_]/.test(source[i + 5] ?? "")
+        ) {
           advance("@root".length);
           tokens.push({ kind: "AT_ROOT", value: "@root", pos });
           continue;
         }
-        throw new IrekoError(`unknown annotation: ${rest.slice(0, 10)}...`, pos);
+        throw new IrekoError(
+          `unknown annotation: ${source.slice(i, i + 10)}...`,
+          pos,
+        );
       }
 
       if (c === '"') {
@@ -230,13 +236,9 @@ export function lex(source: string): Token[] {
         throw new IrekoError("unexpected '}' outside diagram body", pos);
       }
 
-      if (IDENT_RE.test(source.slice(i))) {
+      if (matchIdentAt(i)) {
         const tok = readIdent();
-        if (tok.value === "diagram") {
-          tokens.push({ ...tok, kind: "DIAGRAM" });
-        } else {
-          tokens.push(tok);
-        }
+        tokens.push(tok.value === "diagram" ? { ...tok, kind: "DIAGRAM" } : tok);
         continue;
       }
 

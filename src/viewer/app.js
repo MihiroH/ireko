@@ -1,43 +1,52 @@
 /*
- * ireko viewer shell.
+ * ireko viewer shell — loads diagrams.json, renders the current diagram per
+ * URL hash, post-processes Mermaid's SVG to make `ref` placeholders clickable,
+ * and keeps a breadcrumb trail in sessionStorage.
  *
- * Responsibilities:
- *   1. Load diagrams.json (produced by `ireko build`).
- *   2. Read the current diagram id from window.location.hash.
- *   3. Ask Mermaid to render the diagram's source to SVG.
- *   4. Post-process the SVG: find embedded ireko markers, strip the marker
- *      text from the rendered label, and attach click handlers that navigate
- *      to the referenced diagram.
- *   5. Maintain a breadcrumb trail of visited diagrams and render it in the
- *      header so users can navigate back up.
- *
- * The browser back button works because navigation is done by assigning to
- * window.location.hash, which pushes a history entry.
+ * Navigation assigns `window.location.hash`, so the browser back button
+ * works against the native history stack.
  */
 
 (function () {
   "use strict";
 
-  // Marker syntax must stay in sync with src/emitter.ts.
-  // Format: \u200B⟦ireko:ID⟧\u200B
+  // Marker syntax must stay in sync with src/emitter.ts (the browser has no
+  // bundler, so this regex can't be imported).
   var MARKER_RE = /\u200B?\u27E6ireko:([A-Za-z_][A-Za-z0-9_]*)\u27E7\u200B?/g;
 
-  /** Persisted breadcrumb path, list of diagram ids from root → current. */
   var BREADCRUMB_KEY = "ireko.breadcrumbs";
 
   var state = {
-    data: null,       // DiagramsOutput from diagrams.json
-    current: null,    // current diagram id
-    breadcrumbs: [],  // list of ids
+    data: null,
+    breadcrumbs: [],
   };
 
   function qs(sel) { return document.querySelector(sel); }
 
+  function currentIdFromHash() {
+    var h = window.location.hash.replace(/^#/, "");
+    return h || null;
+  }
+
+  function currentId() {
+    return state.breadcrumbs.length
+      ? state.breadcrumbs[state.breadcrumbs.length - 1]
+      : null;
+  }
+
+  function shallowEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
   function setBreadcrumbs(ids) {
+    if (shallowEqual(ids, state.breadcrumbs)) return;
     state.breadcrumbs = ids;
     try {
       sessionStorage.setItem(BREADCRUMB_KEY, JSON.stringify(ids));
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* storage may be disabled */ }
   }
 
   function loadBreadcrumbs() {
@@ -51,39 +60,26 @@
     }
   }
 
-  function currentIdFromHash() {
-    var h = window.location.hash.replace(/^#/, "");
-    return h || null;
+  function computeTrail(id) {
+    var trail = state.breadcrumbs;
+    var idx = trail.indexOf(id);
+    if (idx >= 0) return trail.slice(0, idx + 1);
+    if (trail.length > 0) return trail.concat([id]);
+    return id === state.data.root ? [id] : [state.data.root, id];
   }
 
   function navigate(id, opts) {
     opts = opts || {};
-    var prev = state.current;
-    // Update the breadcrumb trail. If we're navigating to an id already in
-    // the trail (e.g., clicking a breadcrumb), truncate to that point.
-    var idx = state.breadcrumbs.indexOf(id);
-    var newTrail;
-    if (idx >= 0) {
-      newTrail = state.breadcrumbs.slice(0, idx + 1);
-    } else if (opts.replaceTrail) {
-      newTrail = [id];
-    } else if (prev !== null && state.breadcrumbs.length > 0 &&
-               state.breadcrumbs[state.breadcrumbs.length - 1] === prev) {
-      newTrail = state.breadcrumbs.concat([id]);
-    } else {
-      // We don't know how we got here (e.g., user hit back). Start a fresh
-      // trail from the root if this isn't already the root.
-      if (id === state.data.root) {
-        newTrail = [id];
-      } else {
-        newTrail = [state.data.root, id];
-      }
-    }
-    setBreadcrumbs(newTrail);
+    setBreadcrumbs(computeTrail(id));
 
     if (opts.push !== false) {
-      window.location.hash = "#" + id;
-      return; // hashchange listener will trigger render
+      if (window.location.hash === "#" + id) {
+        // Same hash — assigning wouldn't fire hashchange, so render now.
+        render(id);
+      } else {
+        window.location.hash = "#" + id;
+      }
+      return;
     }
     render(id);
   }
@@ -104,7 +100,6 @@
       return;
     }
 
-    state.current = id;
     qs("#title").textContent = diagram.title;
     renderBreadcrumbs();
 
@@ -121,7 +116,7 @@
       .then(function (result) {
         main.innerHTML = result.svg;
         var svg = main.querySelector("svg");
-        if (svg) postProcessMarkers(svg, diagram);
+        if (svg) postProcessMarkers(svg);
         if (result.bindFunctions) {
           try { result.bindFunctions(main); } catch (_) { /* ignore */ }
         }
@@ -136,26 +131,21 @@
   }
 
   /**
-   * Walk the rendered SVG, find every text node containing an ireko marker,
-   * strip the marker from the display text, and attach a click handler to
-   * the nearest enclosing <g> that navigates to the referenced diagram.
+   * For every text node in the SVG, strip any embedded ireko markers and
+   * attach a click handler on the nearest <g> that drills into the target.
    */
-  function postProcessMarkers(svg, _diagram) {
+  function postProcessMarkers(svg) {
     var texts = svg.querySelectorAll("text, tspan");
     texts.forEach(function (node) {
       var original = node.textContent;
       if (!original) return;
-      MARKER_RE.lastIndex = 0;
-      if (!MARKER_RE.test(original)) return;
-      MARKER_RE.lastIndex = 0;
       var targets = [];
       var cleaned = original.replace(MARKER_RE, function (_m, id) {
         targets.push(id);
         return "";
       });
-      node.textContent = cleaned;
       if (targets.length === 0) return;
-      // Attach handler to nearest <g> (or the text node itself as fallback).
+      node.textContent = cleaned;
       var targetId = targets[0];
       var clickable = node.closest("g") || node;
       clickable.classList.add("ireko-ref");
@@ -208,7 +198,9 @@
   function onHashChange() {
     var id = currentIdFromHash();
     if (!id && state.data) id = state.data.root;
-    if (id) navigate(id, { push: false });
+    if (!id) return;
+    if (id === currentId()) return;
+    navigate(id, { push: false });
   }
 
   function installData(data) {
@@ -225,13 +217,13 @@
 
   function boot() {
     // Prefer data inlined into the HTML (so `file://` works). Fall back to
-    // fetch() when the viewer is served over HTTP (e.g., a dev server).
+    // fetch() when the viewer is served over HTTP.
     var inline = document.getElementById("ireko-data");
     if (inline && inline.textContent) {
       try {
         installData(JSON.parse(inline.textContent));
         return;
-      } catch (err) {
+      } catch (_) {
         // fall through to fetch
       }
     }

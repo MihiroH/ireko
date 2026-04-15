@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { LinkedProgram } from "../src/linker.js";
 import { parse } from "../src/parser.js";
 import { link, SYNTHETIC_ROOT_ID } from "../src/linker.js";
 
 const p = (src: string) => link(parse(src));
+
+const childrenOf = (prog: LinkedProgram, id: string): string[] => {
+  const d = prog.diagrams.get(id);
+  if (!d) return [];
+  return d.body.flatMap((b) => (b.kind === "ref" ? [b.target] : []));
+};
 
 describe("linker", () => {
   it("links a well-formed program", () => {
@@ -19,8 +26,8 @@ diagram Sub "Sub" {
 `);
     expect(prog.rootId).toBe(SYNTHETIC_ROOT_ID);
     expect(prog.diagrams.has("Sub")).toBe(true);
-    expect(prog.children.get(SYNTHETIC_ROOT_ID)).toEqual(["Sub"]);
-    expect(prog.children.get("Sub")).toEqual([]);
+    expect(childrenOf(prog, SYNTHETIC_ROOT_ID)).toEqual(["Sub"]);
+    expect(childrenOf(prog, "Sub")).toEqual([]);
     expect(prog.warnings).toEqual([]);
   });
 
@@ -126,7 +133,7 @@ diagram Sub "S" {
     y
 }
 `);
-    expect(prog.children.get(prog.rootId)).toEqual(["Sub", "Sub"]);
+    expect(childrenOf(prog, prog.rootId)).toEqual(["Sub", "Sub"]);
     expect(prog.warnings).toEqual([]);
   });
 

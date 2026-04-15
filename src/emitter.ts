@@ -1,5 +1,6 @@
 import type { BodyLine, Diagram } from "./ast.js";
 import type { LinkedProgram } from "./linker.js";
+import { IDENT_PATTERN } from "./patterns.js";
 
 /**
  * The data shape the emitter writes to `diagrams.json`. Matches the schema
@@ -32,7 +33,10 @@ export interface EmittedDiagram {
 export const IREKO_MARKER_OPEN = "\u200B\u27E6ireko:";
 export const IREKO_MARKER_CLOSE = "\u27E7\u200B";
 /** Regex the viewer uses to locate markers in rendered SVG text. */
-export const IREKO_MARKER_REGEX = /\u200B?\u27E6ireko:([A-Za-z_][A-Za-z0-9_]*)\u27E7\u200B?/g;
+export const IREKO_MARKER_REGEX = new RegExp(
+  `\u200B?\u27E6ireko:(${IDENT_PATTERN})\u27E7\u200B?`,
+  "g",
+);
 
 /** Produce the emitter output for a linked program. */
 export function emit(program: LinkedProgram): DiagramsOutput {
@@ -121,19 +125,16 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
   };
 }
 
-/**
- * Match `participant Foo` or `participant Foo as "Display Name"`
- * or `actor Bob` lines. Returns the actor id (not display name), or null.
- */
+const PARTICIPANT_RE = new RegExp(
+  `^(?:participant|actor)\\s+(${IDENT_PATTERN})(?:\\s|$)`,
+);
+
+/** The actor id (not display name) if this line declares one; else null. */
 function extractParticipant(text: string): string | null {
-  const trimmed = text.trim();
-  const m = /^(?:participant|actor)\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s|$)/.exec(trimmed);
-  if (!m) return null;
-  return m[1];
+  const m = PARTICIPANT_RE.exec(text.trim());
+  return m ? m[1] : null;
 }
 
 function extractIndent(line: { pos: { col: number } }): string {
-  // Use the column the ref started at (1-based) minus 1 to reproduce indent.
-  const n = Math.max(0, line.pos.col - 1);
-  return " ".repeat(n);
+  return " ".repeat(Math.max(0, line.pos.col - 1));
 }
