@@ -93,15 +93,17 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
 
     if (anchor !== null) {
       // Anchored ref — bind to an existing element, don't create a new one.
+      // Anchor may be comma-separated (e.g., "C,S" for Note over C,S:).
+      // Flowchart `click` only takes a single node id, so use the first.
+      const firstAnchor = anchor.split(",")[0];
       switch (host.type) {
         case "flowchart": {
-          // Mermaid `click` makes the node an <a>, navigating via hash.
-          outLines.push(`${indent}click ${anchor} "#${target}"`);
+          outLines.push(`${indent}click ${firstAnchor} "#${target}"`);
           if (!anchoredClassEmitted) {
             outLines.push(`${indent}classDef ireko_ref stroke:#2563eb,stroke-width:2px`);
             anchoredClassEmitted = true;
           }
-          outLines.push(`${indent}class ${anchor} ireko_ref`);
+          outLines.push(`${indent}class ${firstAnchor} ireko_ref`);
           break;
         }
         case "sequence": {

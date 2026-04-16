@@ -216,6 +216,26 @@ diagram SubB "B" {
     expect(m).toContain("class Y ireko_ref");
   });
 
+  it("multi-anchor ref in sequenceDiagram emits Note over A,B", () => {
+    const out = build(`@root
+diagram "R" {
+  sequenceDiagram
+    participant C as Client
+    participant S as Server
+    ref C,S > Sub
+    C->>S: hello
+}
+diagram Sub "Handshake Detail" {
+  sequenceDiagram
+    participant X
+    X->>X: noop
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain("Note over C,S: 🔍 Handshake Detail");
+    expect(out.diagrams[out.root].refs[0].anchor).toBe("C,S");
+  });
+
   it("mixes standalone and anchored refs in same diagram", () => {
     const out = build(`@root
 diagram "R" {

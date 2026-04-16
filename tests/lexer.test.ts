@@ -102,6 +102,20 @@ describe("lexer", () => {
     expect(ref.value).toBe("Day1>Sub");
   });
 
+  it("recognizes multi-anchor ref lines (ref A,B > Target)", () => {
+    const src = 'diagram A "T" {\n  ref C,S > Sub\n}\n';
+    const toks = lex(src);
+    const ref = toks.find((t) => t.kind === "REF_LINE")!;
+    expect(ref.value).toBe("C,S>Sub");
+  });
+
+  it("normalizes spaces around commas in multi-anchor ref", () => {
+    const src = 'diagram A "T" {\n  ref C , S > Sub\n}\n';
+    const toks = lex(src);
+    const ref = toks.find((t) => t.kind === "REF_LINE")!;
+    expect(ref.value).toBe("C,S>Sub");
+  });
+
   it("does not treat 'ref X > Y' with extra text as a ref", () => {
     const src = 'diagram A "T" {\n  ref X > Y extra\n}\n';
     const toks = lex(src);
