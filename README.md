@@ -72,8 +72,17 @@ Build it:
 npx ireko build flow.ireko -o out/
 ```
 
-Open `out/index.html` in a browser. Click the `🔍 Token Exchange` marker to
-drill in; use the breadcrumb or the browser back button to return.
+Open `out/index.html` in a browser — it works directly from `file://` because
+the diagram data is inlined. Alternatively, serve the output directory with a
+local HTTP server:
+
+```sh
+cd out && python3 -m http.server
+# open http://localhost:8000
+```
+
+Click the `🔍 Token Exchange` marker to drill in; use the breadcrumb or the
+browser back button to return.
 
 ## Syntax
 
