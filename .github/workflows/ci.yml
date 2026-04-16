@@ -49,7 +49,13 @@ jobs:
           set -e
           for src in examples/*.ireko; do
             name=$(basename "$src" .ireko)
-            node dist/cli.cjs build "$src" -o "out/$name"
+            # Capture stderr — warnings here mean a ref/linker bug.
+            stderr=$(node dist/cli.cjs build "$src" -o "out/$name" 2>&1 1>/dev/null || true)
+            if [ -n "$stderr" ]; then
+              echo "FAIL: $src produced warnings/errors on stderr:"
+              echo "$stderr"
+              exit 1
+            fi
             test -f "out/$name/index.html"
             test -f "out/$name/diagrams.json"
             grep -q 'id="ireko-data"' "out/$name/index.html"

@@ -20,6 +20,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "prepare": "tsup",
     "build": "tsup",
     "build:viewer": "node scripts/build-viewer.mjs",
     "test": "vitest run",
