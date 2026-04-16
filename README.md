@@ -112,7 +112,8 @@ file        := (annotation | diagram)*
 annotation  := "@root"                       # applies to the next diagram
 diagram     := "diagram" IDENT? STRING "{" body "}"
 body        := (raw_line | ref_line)*
-ref_line    := whitespace* "ref" IDENT whitespace* newline
+ref_line    := whitespace* "ref" IDENT whitespace* newline              # standalone
+             | whitespace* "ref" IDENT ">" IDENT whitespace* newline    # anchored
 ```
 
 Everything inside a diagram body (except `ref` lines) is **opaque** to
@@ -128,9 +129,13 @@ type works: sequence, flowchart, state, class, ER, and so on.
 - Identifiers are `[A-Za-z_][A-Za-z0-9_]*`.
 - Strings are double-quoted. Use `\"` to embed a quote, `\\` for a backslash.
 - `//` starts a line comment at the file level (outside a diagram body).
-- Each `ref` line must have only `ref Ident` on it (leading whitespace OK).
+- Each `ref` line must have only `ref Ident` or `ref Anchor > Target` on it
+  (leading whitespace OK). The anchored form attaches the drill-down to an
+  existing element instead of creating a new placeholder.
 
 ### What ireko does with `ref` (per diagram type)
+
+**Standalone `ref Target`** — creates a new visual element:
 
 | Host type          | Substitution emitted                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------ |
@@ -138,6 +143,15 @@ type works: sequence, flowchart, state, class, ER, and so on.
 | `flowchart`/`graph`| A node `__ref_Ident__["🔍 <title>"]` inserted at the line’s position                |
 | `stateDiagram-v2`  | A stub state `state "🔍 <title>" as Ident_ref`                                      |
 | other              | A `%% ref: Ident` comment (drill-down still works but the marker is not prominent)  |
+
+**Anchored `ref Anchor > Target`** — binds to an existing element:
+
+| Host type          | Substitution emitted                                                                |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| `flowchart`/`graph`| `click Anchor "#Target"` + a styling class — the existing node becomes a link       |
+| `sequenceDiagram`  | `Note over Anchor: 🔍 <title>` — note on the specified participant                 |
+| `stateDiagram-v2`  | State stub anchored to the named state                                              |
+| other              | A `%% ref: Anchor > Target` comment                                                |
 
 ## CLI
 
@@ -221,6 +235,7 @@ examples/        # .ireko sample sources
                  #   oidc.ireko                   — OIDC login flow (the quick-start)
                  #   login-consolidation.ireko    — longer case study
                  #   architecture.ireko           — ireko's own pipeline, written in ireko
+                 #   tls-handshake.ireko         — anchored ref demo (flowchart nodes as drill-downs)
 ```
 
 ## Limitations (v0)

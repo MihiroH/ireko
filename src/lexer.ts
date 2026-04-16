@@ -35,7 +35,12 @@ enum Mode {
 
 /** Sticky so we can match at `source[i]` without slicing — big win for long files. */
 const IDENT_RE = new RegExp(IDENT_PATTERN, "y");
-const REF_LINE_RE = new RegExp(`^\\s*ref\\s+(${IDENT_PATTERN})\\s*$`);
+// Standalone: `ref Target`
+// Anchored:   `ref Anchor > Target`
+const REF_STANDALONE_RE = new RegExp(`^\\s*ref\\s+(${IDENT_PATTERN})\\s*$`);
+const REF_ANCHORED_RE = new RegExp(
+  `^\\s*ref\\s+(${IDENT_PATTERN})\\s*>\\s*(${IDENT_PATTERN})\\s*$`,
+);
 const LEADING_WS_RE = /^\s*/;
 const ER_CARDINALITY_RE = /[|o{}]{1,2}--[|o{}]{1,2}/g;
 
@@ -131,7 +136,20 @@ export function lex(source: string): Token[] {
     while (end < source.length && source[end] !== "\n") end++;
     const rawLine = source.slice(lineStart, end);
 
-    const refMatch = REF_LINE_RE.exec(rawLine);
+    // Try anchored form first (`ref Anchor > Target`), then standalone (`ref Target`).
+    const anchoredMatch = REF_ANCHORED_RE.exec(rawLine);
+    if (anchoredMatch) {
+      advance(end - i);
+      if (source[i] === "\n") advance();
+      const indent = LEADING_WS_RE.exec(rawLine)![0].length;
+      // Encode both ids: "anchor>target"
+      return {
+        kind: "REF_LINE",
+        value: `${anchoredMatch[1]}>${anchoredMatch[2]}`,
+        pos: { line: startPos.line, col: startPos.col + indent },
+      };
+    }
+    const refMatch = REF_STANDALONE_RE.exec(rawLine);
     if (refMatch) {
       advance(end - i);
       if (source[i] === "\n") advance();

@@ -129,7 +129,18 @@ class Parser {
       if (t.kind === "RAW_LINE") {
         body.push({ kind: "raw", text: t.value, pos: t.pos });
       } else if (t.kind === "REF_LINE") {
-        body.push({ kind: "ref", target: t.value, pos: t.pos });
+        // Lexer encodes anchored refs as "anchor>target", standalone as "target".
+        const gtIdx = t.value.indexOf(">");
+        if (gtIdx >= 0) {
+          body.push({
+            kind: "ref",
+            anchor: t.value.slice(0, gtIdx),
+            target: t.value.slice(gtIdx + 1),
+            pos: t.pos,
+          });
+        } else {
+          body.push({ kind: "ref", anchor: null, target: t.value, pos: t.pos });
+        }
       } else {
         throw new IrekoError(`unexpected token in diagram body: ${t.kind}`, t.pos);
       }

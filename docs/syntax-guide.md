@@ -68,11 +68,49 @@ diagram "メインフロー" {
 
 ### ref（参照）
 
+2 つの形式があります。
+
+#### スタンドアロン ref（新しいプレースホルダーを作る）
+
 ```text
     ref TokenExchange
 ```
 
-- 行全体が `ref 識別子` の形式であるとき、参照として認識されます。
+新しいノート / ノードが挿入され、クリックで遷移先に飛びます。
+
+#### アンカー付き ref（既存の要素に接続する）
+
+```text
+    ref Day1 > TLSDetail
+```
+
+既存のフローチャートノードやシーケンス participant にドリルダウンを付けます。
+新しい要素は作られず、既存の `Day1` がそのままクリック可能になります。
+
+**例：**
+
+```text
+@root
+diagram "TLS Connection" {
+  flowchart LR
+    DNS --> TCP --> TLS --> HTTP
+    ref DNS > DNSDetail       ← DNS ノードをクリックすると詳細に飛ぶ
+    ref TCP > TCPDetail
+    ref TLS > TLSDetail
+}
+
+diagram DNSDetail "DNS Lookup" {
+  sequenceDiagram
+    Client->>Resolver: query
+    ...
+}
+```
+
+`>` の前後の空白は自由です（`ref A>B` も `ref A > B` も OK）。
+
+#### 共通ルール
+
+- 行全体が `ref 識別子` または `ref 識別子 > 識別子` であるとき参照として認識されます。
 - 先頭の空白は OK ですが、ref の後に他のテキストを置くことはできません。
 - 存在しない識別子を ref すると **コンパイルエラー** になります。
 - ref が循環するとエラーになります（`A → B → A`）。
@@ -112,12 +150,23 @@ diagram "メイン" {
 ireko は本体の 1 行目で Mermaid の図の種類を判定し、
 `ref` をその種類に合った形に変換します。
 
+### スタンドアロン ref の変換
+
 | 種類 | 変換先 | 見た目 |
 |------|--------|--------|
 | `sequenceDiagram` | `Note over <直前の participant>: 🔍 タイトル` | ノートボックス |
-| `flowchart` / `graph` | `__ref_ID__["🔍 タイトル"]` | ノード |
+| `flowchart` / `graph` | `__ref_ID__["🔍 タイトル"]` | 新ノード |
 | `stateDiagram-v2` | `state "🔍 タイトル" as ID_ref` | 状態スタブ |
 | その他 | `%% ref: ID`（コメント） | 見えにくいが動作する |
+
+### アンカー付き ref の変換
+
+| 種類 | 変換先 | 見た目 |
+|------|--------|--------|
+| `flowchart` / `graph` | `click Anchor "#Target"` + スタイルクラス | 既存ノードがリンクに |
+| `sequenceDiagram` | `Note over Anchor: 🔍 タイトル` | 指定 participant のノート |
+| `stateDiagram-v2` | `state "🔍 タイトル" as Anchor_ref` | アンカー付きスタブ |
+| その他 | `%% ref: Anchor > Target` | コメント |
 
 いずれの場合もクリック可能になります。
 

@@ -24,6 +24,17 @@ export interface RefLine {
   kind: "ref";
   /** Identifier of the referenced diagram. */
   target: string;
+  /**
+   * Optional anchor — an existing element (node, participant, state) in the
+   * host diagram to attach the drill-down to, instead of creating a new
+   * placeholder.
+   *
+   * Syntax: `ref Anchor > Target`
+   *
+   * When null, the emitter creates a standalone placeholder (the default
+   * behavior). When set, the emitter binds the click to the named element.
+   */
+  anchor: string | null;
   pos: Position;
 }
 

@@ -94,6 +94,22 @@ describe("lexer", () => {
     expect(toks[0].kind).toBe("AT_ROOT");
   });
 
+  it("recognizes anchored ref lines (ref Anchor > Target)", () => {
+    const src = 'diagram A "T" {\n  ref Day1 > Sub\n}\n';
+    const toks = lex(src);
+    const ref = toks.find((t) => t.kind === "REF_LINE")!;
+    expect(ref).toBeDefined();
+    expect(ref.value).toBe("Day1>Sub");
+  });
+
+  it("does not treat 'ref X > Y' with extra text as a ref", () => {
+    const src = 'diagram A "T" {\n  ref X > Y extra\n}\n';
+    const toks = lex(src);
+    // Should be a raw line, not a ref
+    const ref = toks.find((t) => t.kind === "REF_LINE");
+    expect(ref).toBeUndefined();
+  });
+
   it("errors on content after '{' on the same line as header", () => {
     expect(() => lex('diagram "T" { stuff\n}\n')).toThrow(IrekoError);
   });

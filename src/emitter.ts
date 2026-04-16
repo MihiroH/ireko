@@ -19,7 +19,7 @@ export interface EmittedDiagram {
   /** Raw Mermaid source ready to be passed to `mermaid.render`. */
   mermaid: string;
   /** Refs in source order, used by the viewer to rebuild click targets. */
-  refs: { ref: string; label: string }[];
+  refs: { ref: string; label: string; anchor: string | null }[];
 }
 
 /**
@@ -64,12 +64,12 @@ function detectHost(body: BodyLine[]): { type: HostType; header: string } {
 
 function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
   const host = detectHost(diagram.body);
-  const refs: { ref: string; label: string }[] = [];
+  const refs: EmittedDiagram["refs"] = [];
   const outLines: string[] = [];
 
-  // Track the most recently declared participant/actor for sequence notes.
   let lastParticipant: string | null = null;
   const participants: string[] = [];
+  let anchoredClassEmitted = false;
 
   for (const line of diagram.body) {
     if (line.kind === "raw") {
@@ -86,38 +86,63 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
     const target = line.target;
     const targetDiagram = program.diagrams.get(target)!;
     const label = targetDiagram.title;
-    refs.push({ ref: target, label });
+    const anchor = line.anchor;
+    refs.push({ ref: target, label, anchor });
     const marker = `${IREKO_MARKER_OPEN}${target}${IREKO_MARKER_CLOSE}`;
     const indent = extractIndent(line);
 
-    switch (host.type) {
-      case "sequence": {
-        // Reserved name starting with `__` so it can't collide with a
-        // user-declared participant (ireko identifiers start with a letter
-        // or single underscore but not the double-underscore prefix
-        // convention used below — even if someone did pick it, Mermaid will
-        // merge duplicate participant declarations rather than render twice).
-        const SYNTHETIC_ACTOR = "__ireko_actor";
-        const anchor = lastParticipant ?? participants[0] ?? SYNTHETIC_ACTOR;
-        if (lastParticipant === null && participants.length === 0) {
-          outLines.push(`${indent}participant ${SYNTHETIC_ACTOR}`);
-          lastParticipant = SYNTHETIC_ACTOR;
-          participants.push(SYNTHETIC_ACTOR);
+    if (anchor !== null) {
+      // Anchored ref — bind to an existing element, don't create a new one.
+      switch (host.type) {
+        case "flowchart": {
+          // Mermaid `click` makes the node an <a>, navigating via hash.
+          outLines.push(`${indent}click ${anchor} "#${target}"`);
+          if (!anchoredClassEmitted) {
+            outLines.push(`${indent}classDef ireko_ref stroke:#2563eb,stroke-width:2px`);
+            anchoredClassEmitted = true;
+          }
+          outLines.push(`${indent}class ${anchor} ireko_ref`);
+          break;
         }
-        outLines.push(`${indent}Note over ${anchor}: 🔍 ${label}${marker}`);
-        break;
+        case "sequence": {
+          outLines.push(`${indent}Note over ${anchor}: 🔍 ${label}${marker}`);
+          break;
+        }
+        case "state": {
+          outLines.push(`${indent}state "🔍 ${label}${marker}" as ${anchor}_ref`);
+          break;
+        }
+        case "other": {
+          outLines.push(`${indent}%% ref: ${anchor} > ${target}`);
+          break;
+        }
       }
-      case "flowchart": {
-        outLines.push(`${indent}__ref_${target}__["🔍 ${label}${marker}"]`);
-        break;
-      }
-      case "state": {
-        outLines.push(`${indent}state "🔍 ${label}${marker}" as ${target}_ref`);
-        break;
-      }
-      case "other": {
-        outLines.push(`${indent}%% ref: ${target}`);
-        break;
+    } else {
+      // Standalone ref — create a new placeholder element.
+      switch (host.type) {
+        case "sequence": {
+          const SYNTHETIC_ACTOR = "__ireko_actor";
+          const noteAnchor = lastParticipant ?? participants[0] ?? SYNTHETIC_ACTOR;
+          if (lastParticipant === null && participants.length === 0) {
+            outLines.push(`${indent}participant ${SYNTHETIC_ACTOR}`);
+            lastParticipant = SYNTHETIC_ACTOR;
+            participants.push(SYNTHETIC_ACTOR);
+          }
+          outLines.push(`${indent}Note over ${noteAnchor}: 🔍 ${label}${marker}`);
+          break;
+        }
+        case "flowchart": {
+          outLines.push(`${indent}__ref_${target}__["🔍 ${label}${marker}"]`);
+          break;
+        }
+        case "state": {
+          outLines.push(`${indent}state "🔍 ${label}${marker}" as ${target}_ref`);
+          break;
+        }
+        case "other": {
+          outLines.push(`${indent}%% ref: ${target}`);
+          break;
+        }
       }
     }
   }
