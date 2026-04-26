@@ -47,7 +47,7 @@ export function emit(program: LinkedProgram): DiagramsOutput {
   return out;
 }
 
-type HostType = "sequence" | "flowchart" | "state" | "other";
+type HostType = "sequence" | "flowchart" | "state" | "mindmap" | "class" | "timeline" | "other";
 
 function detectHost(body: BodyLine[]): { type: HostType; header: string } {
   for (const line of body) {
@@ -57,6 +57,9 @@ function detectHost(body: BodyLine[]): { type: HostType; header: string } {
     if (/^sequenceDiagram\b/.test(t)) return { type: "sequence", header: t };
     if (/^(flowchart|graph)\b/.test(t)) return { type: "flowchart", header: t };
     if (/^stateDiagram(-v2)?\b/.test(t)) return { type: "state", header: t };
+    if (/^mindmap\b/.test(t)) return { type: "mindmap", header: t };
+    if (/^classDiagram\b/.test(t)) return { type: "class", header: t };
+    if (/^timeline\b/.test(t)) return { type: "timeline", header: t };
     return { type: "other", header: t };
   }
   return { type: "other", header: "" };
@@ -114,6 +117,17 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
           outLines.push(`${indent}state "🔍 ${label}${marker}" as ${anchor}_ref`);
           break;
         }
+        case "mindmap":
+        case "timeline": {
+          // No click directive — emit a visible node with the marker.
+          outLines.push(`${indent}🔍 ${label}${marker}`);
+          break;
+        }
+        case "class": {
+          // classDiagram supports native click binding.
+          outLines.push(`${indent}click ${firstAnchor} href "#${target}"`);
+          break;
+        }
         case "other": {
           outLines.push(`${indent}%% ref: ${anchor} > ${target}`);
           break;
@@ -139,6 +153,15 @@ function emitDiagram(diagram: Diagram, program: LinkedProgram): EmittedDiagram {
         }
         case "state": {
           outLines.push(`${indent}state "🔍 ${label}${marker}" as ${target}_ref`);
+          break;
+        }
+        case "mindmap":
+        case "timeline": {
+          outLines.push(`${indent}🔍 ${label}${marker}`);
+          break;
+        }
+        case "class": {
+          outLines.push(`${indent}note "🔍 ${label}${marker}"`);
           break;
         }
         case "other": {

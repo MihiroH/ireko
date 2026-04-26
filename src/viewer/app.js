@@ -142,14 +142,42 @@
   }
 
   /**
+   * Bind a click/keydown handler that navigates to `targetId`.
+   */
+  function bindRef(el, label, targetId) {
+    if (el.dataset.irekoRef) return; // already bound
+    el.dataset.irekoRef = targetId;
+    el.classList.add("ireko-ref");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("role", "link");
+    el.setAttribute("aria-label", "Drill into: " + label);
+    el.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      navigate(targetId);
+    });
+    el.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        navigate(targetId);
+      }
+    });
+  }
+
+  /**
    * For every text node in the SVG, strip any embedded ireko markers and
    * attach a click handler on the nearest <g> that drills into the target.
+   *
+   * Two passes:
+   * 1. <text>/<tspan> — covers sequenceDiagram, flowchart, stateDiagram
+   * 2. Text nodes inside <foreignObject> — covers mindmap, timeline, etc.
    */
   function postProcessMarkers(svg) {
-    var texts = svg.querySelectorAll("text, tspan");
-    texts.forEach(function (node) {
+    // Pass 1: SVG text elements
+    svg.querySelectorAll("text, tspan").forEach(function (node) {
       var original = node.textContent;
       if (!original) return;
+      MARKER_RE.lastIndex = 0;
       var targets = [];
       var cleaned = original.replace(MARKER_RE, function (_m, id) {
         targets.push(id);
@@ -157,24 +185,32 @@
       });
       if (targets.length === 0) return;
       node.textContent = cleaned;
-      var targetId = targets[0];
       var clickable = node.closest("g") || node;
-      clickable.classList.add("ireko-ref");
-      clickable.setAttribute("tabindex", "0");
-      clickable.setAttribute("role", "link");
-      clickable.setAttribute("aria-label", "Drill into: " + cleaned.trim());
-      clickable.addEventListener("click", function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        navigate(targetId);
-      });
-      clickable.addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          navigate(targetId);
-        }
-      });
+      bindRef(clickable, cleaned.trim(), targets[0]);
     });
+
+    // Pass 2: text nodes inside foreignObject (mindmap, timeline, etc.)
+    var walker = document.createTreeWalker(svg, NodeFilter.SHOW_TEXT, null);
+    var textNode;
+    while ((textNode = walker.nextNode())) {
+      var parent = textNode.parentElement;
+      if (!parent || !parent.closest("foreignObject")) continue;
+      var val = textNode.nodeValue;
+      if (!val) continue;
+      MARKER_RE.lastIndex = 0;
+      if (!MARKER_RE.test(val)) continue;
+      MARKER_RE.lastIndex = 0;
+      var targets = [];
+      var cleaned = val.replace(MARKER_RE, function (_m, id) {
+        targets.push(id);
+        return "";
+      });
+      if (targets.length === 0) continue;
+      textNode.nodeValue = cleaned;
+      var fo = parent.closest("foreignObject");
+      var clickable = fo ? (fo.closest("g") || fo.parentElement || parent) : parent;
+      bindRef(clickable, cleaned.trim(), targets[0]);
+    }
   }
 
   function renderBreadcrumbs() {

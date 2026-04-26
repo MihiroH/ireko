@@ -236,6 +236,105 @@ diagram Sub "Handshake Detail" {
     expect(out.diagrams[out.root].refs[0].anchor).toBe("C,S");
   });
 
+  // --- mindmap ---
+
+  it("emits a visible node for mindmap standalone ref", () => {
+    const out = build(`@root
+diagram "R" {
+  mindmap
+    root((Root))
+      ref Sub
+}
+diagram Sub "S" {
+  sequenceDiagram
+    x
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain("🔍 S");
+    const marker = `${IREKO_MARKER_OPEN}Sub${IREKO_MARKER_CLOSE}`;
+    expect(m).toContain(marker);
+    // Should NOT be a comment
+    expect(m).not.toContain("%% ref:");
+  });
+
+  it("emits a visible node for mindmap anchored ref", () => {
+    const out = build(`@root
+diagram "R" {
+  mindmap
+    root((Root))
+      Branch
+        ref Branch > Sub
+}
+diagram Sub "Detail" {
+  sequenceDiagram
+    x
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain("🔍 Detail");
+    expect(out.diagrams[out.root].refs[0].anchor).toBe("Branch");
+  });
+
+  // --- classDiagram ---
+
+  it("emits a note for classDiagram standalone ref", () => {
+    const out = build(`@root
+diagram "R" {
+  classDiagram
+    class Animal
+    ref Sub
+}
+diagram Sub "S" {
+  sequenceDiagram
+    x
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain('note "🔍 S');
+    expect(m).not.toContain("%% ref:");
+  });
+
+  it("emits click for classDiagram anchored ref", () => {
+    const out = build(`@root
+diagram "R" {
+  classDiagram
+    class Animal
+    class Dog
+    ref Animal > Sub
+}
+diagram Sub "Detail" {
+  sequenceDiagram
+    x
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain('click Animal href "#Sub"');
+    expect(out.diagrams[out.root].refs[0].anchor).toBe("Animal");
+  });
+
+  // --- timeline ---
+
+  it("emits a visible entry for timeline standalone ref", () => {
+    const out = build(`@root
+diagram "R" {
+  timeline
+    title History
+    2023 : Event A
+    ref Sub
+}
+diagram Sub "S" {
+  sequenceDiagram
+    x
+}
+`);
+    const m = out.diagrams[out.root].mermaid;
+    expect(m).toContain("🔍 S");
+    expect(m).not.toContain("%% ref:");
+  });
+
+  // --- mixed ---
+
   it("mixes standalone and anchored refs in same diagram", () => {
     const out = build(`@root
 diagram "R" {
