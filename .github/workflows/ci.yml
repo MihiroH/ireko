@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node 20 EOLs 2026-04-30; Node 22 is Maintenance LTS (EOL 2027-04-30);
+        # Node 24 is Active LTS. Test against both supported LTS lines.
+        node: ["22", "24"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Build before test because tests/cli.test.ts spawns dist/cli.cjs.
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      # Build every example with the installed-style CLI binary and verify
+      # each site is complete. Semantic validity of the emitted Mermaid is
+      # checked by tests/examples.test.ts (which uses the real mermaid parser).
+      - name: Smoke-test CLI on examples
+        run: |
+          set -e
+          for src in examples/*.ireko; do
+            name=$(basename "$src" .ireko)
+            # Capture stderr — warnings here mean a ref/linker bug.
+            stderr=$(node dist/cli.cjs build "$src" -o "out/$name" 2>&1 1>/dev/null || true)
+            if [ -n "$stderr" ]; then
+              echo "FAIL: $src produced warnings/errors on stderr:"
+              echo "$stderr"
+              exit 1
+            fi
+            test -f "out/$name/index.html"
+            test -f "out/$name/diagrams.json"
+            grep -q 'id="ireko-data"' "out/$name/index.html"
+          done

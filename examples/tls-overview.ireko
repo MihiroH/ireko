@@ -1,0 +1,77 @@
+// TLS 1.2 以前の接続確立フローを題材にした ireko サンプルです。
+// ref C,S > Target を使い、Note over で区切りを入れつつ
+// 各フェーズの詳細にドリルダウンできます。
+//
+// ビルド: npx ireko build examples/tls-overview.ireko -o out/tls-overview
+
+@root
+diagram "TLS 1.2 接続確立の全体像" {
+  sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    ref C,S > TCPHandshake
+    C->>S: SYN
+    S->>C: SYN-ACK
+    C->>S: ACK
+
+    ref C,S > TLSHandshake
+    C->>S: ClientHello
+    S->>C: ServerHello + Certificate
+    C->>S: ClientKeyExchange + ChangeCipherSpec
+    S->>C: ChangeCipherSpec + Finished
+
+    ref C,S > HTTPRequest
+    C->>S: GET /index.html
+    S->>C: 200 OK
+}
+
+diagram TCPHandshake "1. TCP接続確立 (3-way handshake)" {
+  sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    C->>S: SYN (seq=x)
+    Note over C: SYN_SENT
+    S->>C: SYN-ACK (seq=y, ack=x+1)
+    Note over S: SYN_RECEIVED
+    C->>S: ACK (ack=y+1)
+    Note over C,S: ESTABLISHED
+}
+
+diagram TLSHandshake "2. TLSハンドシェイク (2-RTT)" {
+  sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    C->>S: ClientHello (cipher suites, random)
+    S->>C: ServerHello (chosen cipher, random)
+    S->>C: Certificate (server cert chain)
+    S->>C: ServerKeyExchange (DH params)
+    S->>C: ServerHelloDone
+
+    C->>C: verify server certificate
+    C->>S: ClientKeyExchange (DH public key)
+    C->>S: ChangeCipherSpec
+    C->>S: Finished (encrypted)
+
+    S->>S: derive master secret
+    S->>C: ChangeCipherSpec
+    S->>C: Finished (encrypted)
+
+    Note over C,S: symmetric encryption established
+}
+
+diagram HTTPRequest "3. HTTPリクエスト (暗号化済み)" {
+  sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    C->>S: GET /index.html HTTP/1.1
+    C->>S: Host: example.com
+    S->>S: process request
+    S->>C: HTTP/1.1 200 OK
+    S->>C: Content-Type: text/html
+    S->>C: body
+    Note over C,S: all data encrypted with session key
+}

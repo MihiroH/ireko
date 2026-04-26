@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+.tmp-examples/
+.DS_Store
+*.log
+coverage/
+.vitest-cache/
+pnpm-lock.yaml.bak

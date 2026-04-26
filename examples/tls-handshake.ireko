@@ -1,0 +1,55 @@
+// 「ref Anchor > Target」（アンカー付き ref）のサンプルです。
+// 既存のフローチャートノードにドリルダウンを接続する使い方を示します。
+//
+// ビルド: npx ireko build examples/tls-handshake.ireko -o out/tls-handshake
+
+@root
+diagram "TLS Connection Lifecycle" {
+  flowchart LR
+    DNS[DNS Lookup] --> TCP[TCP Handshake] --> TLS[TLS Handshake] --> HTTP[HTTP Request]
+    ref DNS > DNSDetail
+    ref TCP > TCPDetail
+    ref TLS > TLSDetail
+}
+
+diagram DNSDetail "DNS Lookup" {
+  sequenceDiagram
+    participant Client
+    participant Resolver as DNS_Resolver
+    participant Auth as Auth_DNS
+
+    Client->>Resolver: query A record
+    alt cache hit
+      Resolver-->>Client: cached IP
+    else cache miss
+      Resolver->>Auth: recursive query
+      Auth-->>Resolver: IP + TTL
+      Resolver-->>Client: resolved IP
+    end
+}
+
+diagram TCPDetail "TCP 3-Way Handshake" {
+  sequenceDiagram
+    participant Client
+    participant Server
+
+    Client->>Server: SYN (seq=x)
+    Server-->>Client: SYN-ACK (seq=y, ack=x+1)
+    Client->>Server: ACK (ack=y+1)
+    Note over Client: connection established
+}
+
+diagram TLSDetail "TLS 1.3 Handshake (1-RTT)" {
+  sequenceDiagram
+    participant Client
+    participant Server
+
+    Client->>Server: ClientHello + key_share
+    Server->>Client: ServerHello + key_share
+    Server->>Client: EncryptedExtensions
+    Server->>Client: Certificate
+    Server->>Client: CertificateVerify
+    Server->>Client: Finished
+    Client->>Server: Finished
+    Note over Client: application data can flow
+}

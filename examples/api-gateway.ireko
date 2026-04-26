@@ -1,0 +1,59 @@
+// API ゲートウェイの認証・ルーティング・エラーハンドリングを
+// 3 層に分けて説明するサンプルです。
+//
+// ビルド: npx ireko build examples/api-gateway.ireko -o out/api-gateway
+
+@root
+diagram "API Gateway Request Flow" {
+  sequenceDiagram
+    actor Client
+    participant GW as API_Gateway
+    participant Auth as Auth_Service
+    participant Router
+    participant Backend
+
+    Client->>GW: HTTPS request
+    GW->>Auth: validate token
+    ref AuthFlow
+    Auth-->>GW: OK / 401
+    alt token valid
+      GW->>Router: route request
+      ref Routing
+      Router-->>GW: response
+      GW-->>Client: 200 + body
+    else token invalid
+      GW-->>Client: 401 Unauthorized
+    end
+}
+
+diagram AuthFlow "Token Validation" {
+  sequenceDiagram
+    participant GW as API_Gateway
+    participant Auth as Auth_Service
+    participant Cache as Token_Cache
+    participant IDP as Identity_Provider
+
+    GW->>Auth: Bearer token
+    Auth->>Cache: lookup token
+    alt cache hit
+      Cache-->>Auth: cached claims
+    else cache miss
+      Auth->>IDP: POST /introspect
+      IDP-->>Auth: claims + expiry
+      Auth->>Cache: store claims
+    end
+    Auth-->>GW: claims or error
+}
+
+diagram Routing "Route Resolution" {
+  flowchart TB
+    Req([incoming request]) --> Match{path matches?}
+    Match -- /api/v1/** --> V1[v1 backend pool]
+    Match -- /api/v2/** --> V2[v2 backend pool]
+    Match -- /health --> Health[health check handler]
+    Match -- no match --> NotFound[404 Not Found]
+    V1 --> RateLimit{rate limit OK?}
+    V2 --> RateLimit
+    RateLimit -- yes --> Forward[forward to backend]
+    RateLimit -- no --> TooMany[429 Too Many Requests]
+}

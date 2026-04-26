@@ -1,0 +1,65 @@
+// CI/CD パイプラインをドリルダウンで説明するサンプルです。
+// トップレベルでパイプライン全体を俯瞰し、
+// 各ステージの詳細をクリックで確認できます。
+//
+// ビルド: npx ireko build examples/ci-pipeline.ireko -o out/ci-pipeline
+
+@root
+diagram "CI/CD Pipeline" {
+  flowchart LR
+    Push([git push]) --> Build[Build]
+    Build --> Test[Test]
+    Test --> Analyze[Analyze]
+    Analyze --> Deploy{Deploy?}
+    Deploy -- main branch --> Staging[Deploy to Staging]
+    Deploy -- release tag --> Prod[Deploy to Production]
+    Deploy -- other --> Skip[Skip deploy]
+    ref BuildStage
+    ref TestStage
+    ref DeployStage
+}
+
+diagram BuildStage "Build Stage" {
+  sequenceDiagram
+    participant CI as CI_Runner
+    participant Registry as Container_Registry
+    participant Cache as Build_Cache
+
+    CI->>Cache: restore node_modules cache
+    Cache-->>CI: cache hit or miss
+    CI->>CI: pnpm install
+    CI->>CI: pnpm typecheck
+    CI->>CI: pnpm build
+    CI->>Registry: push Docker image
+    Registry-->>CI: image digest
+    CI->>Cache: save node_modules cache
+}
+
+diagram TestStage "Test Stage" {
+  sequenceDiagram
+    participant CI as CI_Runner
+    participant DB as Test_Database
+    participant Report as Coverage_Report
+
+    CI->>DB: start test database
+    DB-->>CI: ready
+    CI->>CI: pnpm test --coverage
+    CI->>Report: upload coverage
+    Report-->>CI: coverage percentage
+    CI->>DB: stop test database
+}
+
+diagram DeployStage "Deploy Stage" {
+  sequenceDiagram
+    participant CI as CI_Runner
+    participant K8s as Kubernetes
+    participant Monitor as Monitoring
+
+    CI->>K8s: kubectl apply manifests
+    K8s-->>CI: rollout started
+    CI->>K8s: kubectl rollout status
+    K8s-->>CI: rollout complete
+    CI->>Monitor: notify deploy
+    Monitor-->>CI: acknowledged
+    CI->>CI: run smoke tests against live
+}

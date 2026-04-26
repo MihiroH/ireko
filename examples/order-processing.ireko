@@ -1,0 +1,74 @@
+// EC サイトの注文処理フローを題材にした ireko サンプルです。
+// 注文の全体像 → 決済 → 在庫確保 → 配送手配 と掘り下げていきます。
+//
+// ビルド: npx ireko build examples/order-processing.ireko -o out/order-processing
+
+@root
+diagram "Order Processing" {
+  sequenceDiagram
+    actor Customer
+    participant Web as Web_App
+    participant Order as Order_Service
+    participant Notify as Notification
+
+    Customer->>Web: place order
+    Web->>Order: create order
+    ref PaymentFlow
+    ref InventoryReserve
+    ref ShippingArrange
+    Order-->>Web: order confirmed
+    Web->>Notify: send confirmation email
+    Notify-->>Customer: email with tracking
+}
+
+diagram PaymentFlow "Payment Processing" {
+  sequenceDiagram
+    participant Order as Order_Service
+    participant Payment as Payment_Gateway
+    participant Fraud as Fraud_Check
+
+    Order->>Fraud: check order risk
+    Fraud-->>Order: risk score
+    alt low risk
+      Order->>Payment: authorize card
+      Payment-->>Order: auth code
+    else high risk
+      Order->>Payment: authorize with 3DS
+      Payment-->>Order: challenge URL
+      Note over Order: redirect customer to 3DS
+      Payment-->>Order: auth code
+    end
+    Order->>Payment: capture payment
+    Payment-->>Order: capture confirmation
+}
+
+diagram InventoryReserve "Inventory Reservation" {
+  sequenceDiagram
+    participant Order as Order_Service
+    participant Inv as Inventory_DB
+    participant Warehouse as Warehouse_API
+
+    Order->>Inv: check stock for items
+    Inv-->>Order: availability per item
+    alt all in stock
+      Order->>Inv: reserve items
+      Inv-->>Order: reservation ID
+    else partial stock
+      Order->>Warehouse: request backorder
+      Warehouse-->>Order: estimated date
+      Order->>Inv: reserve available items
+    end
+}
+
+diagram ShippingArrange "Shipping Arrangement" {
+  sequenceDiagram
+    participant Order as Order_Service
+    participant Ship as Shipping_Provider
+    participant Track as Tracking_Service
+
+    Order->>Ship: create shipment
+    Ship-->>Order: shipment ID + label PDF
+    Order->>Track: register tracking number
+    Track-->>Order: tracking URL
+    Note over Order: attach tracking URL to order record
+}
